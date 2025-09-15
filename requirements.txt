@@ -1,0 +1,17 @@
+# processing des data
+os
+pathlib
+numpy
+pandas
+json
+
+# visualisation
+matplotlib
+seaborn
+
+# Ray Tune
+ray[tune]
+
+# deep learning
+tensorflow
+math
