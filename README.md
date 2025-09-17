@@ -1,4 +1,4 @@
-# Image to Image supervised Machine Learning
+# Image_to_Image supervised Machine Learning
 
 ## Objective
 
@@ -43,26 +43,24 @@ https://huggingface.co/radames/stable-diffusion-v1-5-img2img
 
 ### 1- local environment
 
-1- Download dependencies : retrieve the required libraries (compiled PyPI packages) from the internet into a dedicated folder 
+1- Download dependencies : retrieve the required libraries (compiled PyPI packages) from the internet into a dedicated local folder 
 
-2- Transfer files : store the downloaded packages in a local folder
+2- Create and initialize a Python virtual environment
 
-3- Create a virtual environment : initialize a Python virtual environment
-
-4- Install dependencies: Install all libraries from the local folder 
+3- Install all libraries from the local folder 
 
 
 ### 2- Remote Supercomputer Environment
 
 1- Transfer packages: Copy the folder containing the compiled PyPI packages to the supercomputer’s storage
 
-2- Module setup : load the compatibility combination GNU(compiler)/CUDA(GPU acceleration)/MPI(distributed or parallel execution)/Python 
+2- Module set up : load the compatibility combination GNU(compiler)/CUDA(GPU acceleration)/MPI(distributed or parallel execution)/Python 
 
 3- Resource Management: Using a job submission script to ensure correct allocation of CPUs, GPUs, and memory
 
 4- Set up environment: Create a Python virtual environment
 
-5- Install dependencies: Run the script script_venv.sh on the supercomputer to install libraries from the transferred folder.
+5- Install dependencies : install all libraries on the supercomputer from the transferred folder.
 
 6- Job scheduling: Use the supercomputer’s scheduler to submit training and evaluation jobs
 
