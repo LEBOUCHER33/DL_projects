@@ -36,24 +36,19 @@ https://huggingface.co/radames/stable-diffusion-v1-5-img2img
 
 
 
-## Installation
 
-### Setting up the Working Environment
+## Setting up the Working Environment
 
-#### 1- local environment
+### 1- local environment
 
-1- Download dependencies : retrieve the required libraries (compiled PyPI packages) from the internet into a dedicated folder 
+1- Download dependencies : retrieve the required libraries (compiled PyPI packages) from the internet into a dedicated local folder 
 
+2- Create and initalize a Python virtual environment
 
-
-2- Transfer files : store the downloaded packages in a local folder
-
-3- Create a virtual environment : initialize a Python virtual environment
-
-4- Install dependencies: Install all libraries from the local folder 
+4- Install dependencies from the local folder 
 
 
-#### 2- Remote Supercomputer Environment
+### 2- Remote Supercomputer Environment
 
 1- Transfer packages: Copy the folder containing the compiled PyPI packages to the supercomputer’s storage
 
@@ -63,7 +58,7 @@ https://huggingface.co/radames/stable-diffusion-v1-5-img2img
 
 4- Set up environment: Create a Python virtual environment
 
-5- Install dependencies: Run the script script_venv.sh on the supercomputer to install libraries from the transferred folder.
+5- Install dependencies on the supercomputer from the transferred folder
 
 6- Job scheduling: Use the supercomputer’s scheduler to submit training and evaluation jobs
 
@@ -77,13 +72,6 @@ https://huggingface.co/radames/stable-diffusion-v1-5-img2img
 3- Use sshfs to mount a remote directory from the supercomputer onto the local machine
 
 
-
-
-### 2- Code Access and Remote Linking
-
-1- Cloning the Repository : retrieve the project source from the remote Git repositiry 
-2- Navigate into the cloned project directory to access scripts and configuration files
-3- Use sshfs to mount a remote directory from the supercomputer onto the local machine
 
 
 ## Workflow 
