@@ -28,6 +28,7 @@ By progressively denoising latent representations, the model reconstructs high-r
 ## Badges
 
 link to the originel tutorials:
+
 https://www.tensorflow.org/tutorials/generative/pix2pix?hl=fr
 
 https://mistral.ai/fr/news/unlocking-potential-vision-language-models-satellite-imagery-fine-tuning
