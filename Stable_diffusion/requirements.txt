@@ -1,0 +1,29 @@
+
+
+Requirements pour le fine_tuning via les adaptaters LoRA de HuggingFace :
+
+HuggingFace est une PF permettant de contruire, loader, entrainer et deployer des modèles de ML OpenSource
+Les outils à disposition nécessitent principalement les lib Pytorch, Transformers et Diffusers
+
+# Core Python and ML librairies
+torch \
+torchvision \
+pandas \
+numpy \
+matplotlib \
+seaborn \
+ipython \
+pathlib \
+scikit-learn \
+scipy \
+
+# Image processing
+pillow \
+
+# HuggingFace ecosystem
+transformers \
+diffusers \
+peft \
+datasets \
+safetensors \
+xformers \

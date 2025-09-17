@@ -1,5 +1,3 @@
-# DL_projects
-
 # Image to Image supervised Machine Learning
 
 ## Objective
@@ -32,20 +30,60 @@ By progressively denoising latent representations, the model reconstructs high-r
 link to the originel tutorials:
 https://www.tensorflow.org/tutorials/generative/pix2pix?hl=fr
 
+https://mistral.ai/fr/news/unlocking-potential-vision-language-models-satellite-imagery-fine-tuning
+
+https://huggingface.co/radames/stable-diffusion-v1-5-img2img
+
 
 
 ## Installation
 
-### 1- Setting up the Working Environment
+### Setting up the Working Environment
 
-1- Download the required libraries (compiled PyPI packages) from the internet into a dedicated folder using the shell script script_repo_update.sh.
-2- Transfer this folder to the target computing machine.
-3- Create a virtual environment on the machine and install the libraries from the local folder using the shell script script_venv_update.sh.
+#### 1- local environment
 
-### 2- Clone the Git Repository
-git clone https://gitlab.cesta.dam.intra.cea.fr/sl613344/pix2pix.git
-link to the computing machine with sshfs command system
-create a copy of the repo on computing machine
+1- Download dependencies : retrieve the required libraries (compiled PyPI packages) from the internet into a dedicated folder 
+
+
+
+2- Transfer files : store the downloaded packages in a local folder
+
+3- Create a virtual environment : initialize a Python virtual environment
+
+4- Install dependencies: Install all libraries from the local folder 
+
+
+#### 2- Remote Supercomputer Environment
+
+1- Transfer packages: Copy the folder containing the compiled PyPI packages to the supercomputer’s storage
+
+2- Module setup : load the compatibility combination GNU(compiler)/CUDA(GPU acceleration)/MPI(distributed or parallel execution)/Python 
+
+3- Resource Management: Using a job submission script to ensure correct allocation of CPUs, GPUs, and memory
+
+4- Set up environment: Create a Python virtual environment
+
+5- Install dependencies: Run the script script_venv.sh on the supercomputer to install libraries from the transferred folder.
+
+6- Job scheduling: Use the supercomputer’s scheduler to submit training and evaluation jobs
+
+
+### 3- Code Access and Remote Linking
+
+1- Cloning the Repository : retrieve the project source from the remote Git repositiry 
+
+2- Navigate into the cloned project directory to access scripts and configuration files
+
+3- Use sshfs to mount a remote directory from the supercomputer onto the local machine
+
+
+
+
+### 2- Code Access and Remote Linking
+
+1- Cloning the Repository : retrieve the project source from the remote Git repositiry 
+2- Navigate into the cloned project directory to access scripts and configuration files
+3- Use sshfs to mount a remote directory from the supercomputer onto the local machine
 
 
 ## Workflow 

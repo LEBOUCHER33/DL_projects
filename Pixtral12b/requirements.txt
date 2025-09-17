@@ -1,0 +1,17 @@
+# data processing
+numpy
+os
+pandas
+Pillow
+json
+ipython
+
+# machine learning
+torch
+torchvision
+mistalai==1.9.3
+scikit-learn
+transformers
+datasets
+accelerate
+peft
