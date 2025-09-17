@@ -45,9 +45,27 @@ https://huggingface.co/radames/stable-diffusion-v1-5-img2img
 
 1- Download dependencies : retrieve the required libraries (compiled PyPI packages) from the internet into a dedicated local folder 
 
+```bash
+my_pip_download () {
+	pip download --only-binary=:all: "$@"
+}
+# NB : --only-binary=:all: force le pip à ne télécharger que les fichiers binaires (fichiers .whl) et pas les fichiers sources (fichiers .tar.gz)
+my_pip_download -r requirements.txt
+```
 2- Create and initialize a Python virtual environment
+```bash
+python -m venv my_env
+source my_env/bin/activate
+```
 
 3- Install all libraries from the local folder 
+```bash
+export REPO_HOME="<path/to/folder>"
+my_pip_install(){
+	pip install -f $REPO_HOME/ --no-index "$@"
+}
+my_pip_install -r requirements.txt
+```
 
 
 ### 2- Remote Supercomputer Environment
