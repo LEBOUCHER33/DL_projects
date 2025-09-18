@@ -72,15 +72,22 @@ my_pip_install -r requirements.txt
 
 1- Transfer packages: Copy the folder containing the compiled PyPI packages to the supercomputer’s storage
 
-2- Module set up : load the compatibility combination GNU(compiler)/CUDA(GPU acceleration)/MPI(distributed or parallel execution)/Python 
+2- Module set up : load the compatibility stack of GNU(compiler)/CUDA(GPU acceleration)/MPI(distributed or parallel execution)/Python 
 
-3- Resource Management: Using a job submission script to ensure correct allocation of CPUs, GPUs, and memory
+3- Resource Management: Use a job submission script to request correct allocation of CPUs, GPUs, and memory
 
-4- Set up environment: Create a Python virtual environment
+4- Job scheduling: Use the supercomputer’s scheduler to submit training and evaluation jobs
 
-5- Install dependencies : install all libraries on the supercomputer from the transferred folder.
+5- Set up environment: Create and initialize a Python virtual environment
 
-6- Job scheduling: Use the supercomputer’s scheduler to submit training and evaluation jobs
+6- Install dependencies : install all libraries on the supercomputer from the transferred folder.
+```bash
+export REPO_HOME="<path/to/folder>"
+my_pip_install(){
+	pip install -f $REPO_HOME/ --no-index "$@"
+}
+my_pip_install -r requirements.txt
+```
 
 
 ### 3- Code Access and Remote Linking
