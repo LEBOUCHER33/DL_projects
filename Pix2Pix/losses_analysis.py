@@ -121,17 +121,17 @@ def plot_losses(df, trial_ids, linewidth=1, alpha=0.6):
                     label="val_loss" if not legend_done["val"] else None
                 )
                 legend_done["val"] = True
-            #if "disc_loss" in trial_data.columns:
-            #    plt.plot(
-            #        x,
-            #        smooth(trial_data["disc_loss"]),
-            #        color=f"C{i}",
-            #        linestyle=":",
-            #        linewidth=linewidth,
-            #        alpha=alpha,
-            #        label="disc_loss" if not legend_done["disc"] else None
-            #    )
-            #    legend_done["disc"] = True
+            if "disc_loss" in trial_data.columns:
+                plt.plot(
+                    x,
+                    smooth(trial_data["disc_loss"]),
+                    color=f"C{i}",
+                    linestyle=":",
+                    linewidth=linewidth,
+                    alpha=alpha,
+                    label="disc_loss" if not legend_done["disc"] else None
+                )
+                legend_done["disc"] = True
 
 # ========================
 # Tracé principal
