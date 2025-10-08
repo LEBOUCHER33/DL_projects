@@ -1,14 +1,8 @@
 
 
-import os
-import matplotlib.pyplot as plt
-import json
-import pandas as pd
-import numpy as np
-
 """
 
-script qui permet d'afficher les histogrammes des résultats d'entrainements de chacun des hyperparamètres testés
+script qui permet d'afficher les histogrammes des entrainements pour chacune des combinaisons de valeurs d'hyperparamètres testés
 
 objectif :
 
@@ -19,6 +13,16 @@ objectif :
 - pour chacun des hyperparamètres testés on affiche un histogramme de ses différentes valeurs
 
 """
+
+
+
+import os
+import matplotlib.pyplot as plt
+import json
+import pandas as pd
+import numpy as np
+
+
 
 output_dir = os.path.abspath("./graph_results_cas_6")
 os.makedirs(output_dir, exist_ok=True)

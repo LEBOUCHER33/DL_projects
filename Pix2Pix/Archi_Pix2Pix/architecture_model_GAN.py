@@ -1,4 +1,10 @@
 
+"""
+Script pour définir l'architecture du générateur et du discriminateur
+
+"""
+
+
 import math
 import tensorflow as tf
 

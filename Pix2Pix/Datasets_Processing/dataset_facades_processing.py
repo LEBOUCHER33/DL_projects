@@ -1,10 +1,5 @@
 
 
-# import des librairies
-from pathlib import Path
-import tensorflow as tf
-
-
 """
 Script pour le chargement et la préparation du dataset "facades"
     -chargement des images
@@ -13,6 +8,14 @@ Script pour le chargement et la préparation du dataset "facades"
     -séparation en dataset d'entrainement et de validation
     -fonction pour charger le dataset
 """
+
+
+
+# import des librairies
+from pathlib import Path
+import tensorflow as tf
+
+
 
 # dataset d'entrainement et préparation des images
 dataset_name = "facades"

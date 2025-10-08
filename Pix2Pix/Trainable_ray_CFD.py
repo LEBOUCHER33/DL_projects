@@ -1,23 +1,23 @@
-"""
-
-Script de lancement des entrainements avec Ray[tune]
-Optimisation des hyperparamètres
-Paramétrage de Ray et de la grille de recherche
-Définition des métriques de performance
 
 
 """
+Script qui configure la recherche d'hyperparamètres avec Ray[tune]
+
+Paramétrage de Ray (ressources / checkpoints / stopper) et de la grille de recherche
+
+Dataset de CFD avec des paires inp/tar mélangées aléatoirement
+
+"""
+
+
+
 import tensorflow as tf
 import os
 from pathlib import Path
 import json
-
 from train import fit, calculate_gen_loss
-#from CFD_dataset import get_tf_dataset
-from CFD_dataset_cas_4 import get_tf_dataset, load_dataset, resize_and_normalize
+from CFD_dataset_cas_2 import load_dataset, get_tf_dataset, resize_and_normalize
 from CFD import Generator, Discriminator
-from tensorflow import keras
-from keras.models import load_model
 import ray
 from ray import tune
 from ray.tune.tuner import Tuner
@@ -64,12 +64,12 @@ class MyTrainable(Trainable):
         )
 
         self.generator.compile(loss=tf.keras.losses.MeanAbsoluteError())
+
         # Chargement du dataset
         # Sélectionne les données, redimensionne et normalise
-        x_train, y_train, x_val, y_val, x_test, y_test = load_dataset(
-        dataset_path, 
-        offset=1, 
-        split=(0.6, 0.2, 0.2))
+        inputs, targets, train_idx, test_idx, val_idx = load_dataset(dataset_path, offset=1)
+        x_train, y_train = resize_and_normalize(inputs[train_idx], targets[train_idx])
+        x_val, y_val = resize_and_normalize(inputs[val_idx], targets[val_idx])
 
         self.train_dataset = get_tf_dataset(x_train, y_train, BATCH_SIZE=config["BATCH_SIZE"])
         self.val_dataset = get_tf_dataset(x_val, y_val, BATCH_SIZE=1, shuffle=False)
@@ -241,7 +241,7 @@ stopper = TrialPlateauStopper(
 # planificateur ASHA pour accélérer l'optimisation
 
 scheduler = ASHAScheduler(
-    metric="best_criteria",
+    metric="score",
     mode="min",
     max_t=500,
     grace_period=500   # nbre min d'iterations avant que l'algorithme ASHA agisse
@@ -251,7 +251,7 @@ scheduler = ASHAScheduler(
 # configuration de tune
 
 tune_config = TuneConfig(
-    num_samples=100,
+    num_samples=1000,
     max_concurrent_trials=4,
     scheduler=scheduler
 )
@@ -270,8 +270,8 @@ checkpoint_config = CheckpointConfig(
 # configuration de l'exécution
 
 run_config = RunConfig(
-    name="cas_6_run_1",
-    storage_path=os.path.abspath("./my_ray_results_cas_6"),
+    name="cas_8_run_1",
+    storage_path=os.path.abspath("./my_ray_results_cas_8"),
     stop=stopper,  # ou stop={"training_iteration": 10}
     checkpoint_config=checkpoint_config
 )
@@ -289,8 +289,8 @@ if __name__ == "__main__":
     print("initialisation de Ray :", ray.is_initialized())
 
     print("Chargement des datasets")
-    dataset_name = "film_cfd_128_1.npy"
-    dataset_path = Path("./git/ImageMLProject/Datasets/") / dataset_name
+    dataset_name = "film_3.npy"
+    dataset_path = Path("./git/ImageMLProject/Datasets/CFD_Dataset/") / dataset_name
     dataset_path = dataset_path.resolve()
 
     trainable = tune.with_parameters(
@@ -300,7 +300,7 @@ if __name__ == "__main__":
     trainable_with_resources = tune.with_resources(trainable, {"cpu": 48, "gpu": 1})
     # récupération si entrainement interrompu
     restore_path=os.path.join(
-        os.path.abspath("./my_ray_results_cas_6/cas_6_run_1")
+        os.path.abspath("./my_ray_results_cas_8/cas_8_run_1")
     )
     if tune.Tuner.can_restore(restore_path):
         print(f"Restauration de l'entrainement depuis {restore_path}")

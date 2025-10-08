@@ -1,23 +1,21 @@
+
+
+
 """
+
 Script de lancement des entrainements avec Ray[tune]
-    - Paramétrage de Ray et de la grille de recherche
-    - gestion des restauration d'entrainement interrompu
-    - définition de la classe Trainable
-    - lancement de l'optimisation avec Tuner
-    - gestion
+Paramétrage de Ray et de la grille de recherche
 
 """
 
-# import des librairies
 
 import tensorflow as tf
 import os
 from pathlib import Path
 import json
-from dataset import load_dataset
-from architecture import Generator, Discriminator
-from train import fit
-from train import fit, calculate_gen_loss
+from Pix2Pix.Datasets_Processing.dataset_CFD_processing import load_dataset
+from Pix2Pix.Archi_Pix2Pix.architecture_model_GAN import Generator, Discriminator
+from training import fit, calculate_gen_loss
 import ray
 from ray import tune
 from ray.tune.tuner import Tuner
@@ -30,38 +28,34 @@ from ray.train import CheckpointConfig
 
 
 
-
 print("\n *** début du script python *** \n")
 
 # on définit le dossier de stockage des outputs
 output_dir = os.path.abspath("resultats_Pix2Pix")
 os.makedirs(output_dir, exist_ok=True)
-# on définit le dossier de stockage des checkpoints
+
 checkpoint_dir = os.path.abspath("./checkpoints")
 os.makedirs(checkpoint_dir, exist_ok=True)
 
 
-# 1- définition de la classe Trainable
 
 class MyTrainable(Trainable):
 
     def setup(self, config):
         """
-        _Summary_ : Initialisation de l'entraînement 
-        (Cette méthode est appelée une fois au début de l'entraînement)
-        _Args_ : config (dictionnaire des hyperparamètres)
-        _Returns_ : None
-        _Side Effects_ : initialise les modèles, les optimiseurs, le dataset, les checkpoints
-        et les variables de suivi des performances
+        Initialisation de l'entraînement.
+        Cette méthode est appelée une fois au début de l'entraînement.
         """
-        # stockage de la configuration
+
         print("GPU disponibles : ", len(tf.config.list_physical_devices('GPU')),
               "GPUs trouvés :", tf.config.list_physical_devices('GPU'))
 
         # Initialisation des modèles et optimiseurs
         self.generator = Generator(
             config["image_size"], config["stride"], config["kernel_size"], config["OUTPUT_CHANNELS"])
+
         self.discriminator = Discriminator()
+
         self.generator_optimizer = tf.keras.optimizers.Adam(
             learning_rate=config["learning_rate"],
             beta_1=config["beta_1"]
@@ -97,22 +91,8 @@ class MyTrainable(Trainable):
 
     def step(self):
         """
-        _Summary_ : Effectue une étape d'entraînement
-        (Cette méthode est appelée à chaque itération d'entraînement)
-        _Args_ : None
-        _Returns_ : dictionnaire des métriques à rapporter
-        _Side Effects_ : met à jour les poids des modèles, calcule les métriques
-        et gère les checkpoints
-        _Note_ : on utilise self.config pour accéder aux hyperparamètres
-        _Note_ : on utilise self.best_criteria pour suivre la meilleure performance
-        _Note_ : on sauvegarde le meilleur modèle si la performance s'améliore
-        _Note_ : on utilise json.dump() pour sauvegarder les critères dans un fichier JSON
-        _Note_ : on utilise self.checkpoint.write() pour sauvegarder les checkpoints
-        _Note_ : on utilise self.checkpoint.restore() pour restaurer les checkpoints
-        _Note_ : on utilise tf.train.Checkpoint() pour gérer les checkpoints
-        _Note_ : on utilise tf.keras.models.save() pour sauvegarder les modèles
-        _Note_ : on utilise tf.keras.models.load_model() pour charger les modèles
-        _Note_ : on utilise os.path.exists() pour vérifier l'existence des fichiers
+        Effectue une étape d'entraînement.
+        Cette méthode est appelée à chaque itération.
         """
 
         # Appel de la fonction d'entraînement
@@ -136,6 +116,9 @@ class MyTrainable(Trainable):
         train_gen_loss = calculate_gen_loss(self.generator, self.train_dataset)
         val_gen_loss = calculate_gen_loss(self.generator, self.val_dataset)
 
+        # calcul du critère d'arrêt Jts
+        #self.Jts = abs(self.train_gen_loss - self.val_gen_loss) + self.val_gen_loss
+
 
        # Retour des métriques à rapporter
         result = {
@@ -143,8 +126,9 @@ class MyTrainable(Trainable):
             "val_gen_loss": val_gen_loss,
             "disc_loss": disc_loss.numpy(),
             "best_criteria": self.best_criteria,
+            #"Jts": self.Jts
         }
-        # Sauvegarde du meilleur modèle si la performance s'améliore
+
         if train_gen_loss < self.best_criteria:
             print(
                 f"Nouveau meilleur modèle : {train_gen_loss:.4f} < {self.best_criteria:.4f}")
@@ -155,10 +139,10 @@ class MyTrainable(Trainable):
 
     def save_checkpoint(self, checkpoint_dir):
         """
-        _summary_ : Sauvegarde le meilleur modèle entrainé et son critère de performance
-        _Args_ : checkpoint_dir (répertoire où sauvegarder le modèle)
-        _Returns_ : le chemin du répertoire de sauvegarde
-        _Side Effects_ : sauvegarde les modèles et le critère dans des fichiers JSON   """
+        Sauvegarde le meilleur model :
+          - generator 
+          - le critère de performance
+        """
         checkpoint_path = os.path.join(checkpoint_dir)
         os.makedirs(checkpoint_path, exist_ok=True)
 
@@ -174,10 +158,7 @@ class MyTrainable(Trainable):
 
     def load_checkpoint(self, checkpoint_path):
         """
-        _summary_ : Recharge le modèle et le critère de performance depuis un checkpoint
-        _Args_ : checkpoint_path (répertoire où charger le modèle)
-        _Returns_ : None
-        _Side Effects_ : recharge les modèles et le critère depuis des fichiers JSON
+        Recharge le meilleur model entrainé et son critère de performance
         """
 
         try:
@@ -209,14 +190,14 @@ class MyTrainable(Trainable):
 
 # grille des paramètres à tester = Search Space
 config_search = {"image_size": 256,
-                 "stride": 2,
-                 "kernel_size": 4,
+                 "stride": tune.choice([2, 3, 4, 5, 6, 7, 8]),
+                 "kernel_size": tune.choice([2, 3, 4, 5, 6, 7, 8]),
                  "OUTPUT_CHANNELS": 3,
                  "BATCH_SIZE": 1,
                  "nb_steps": 1000,
-                 "lambda_l1": 100,
-                 "learning_rate": 2e-4,
-                 "beta_1": 0.5
+                 "lambda_l1": tune.uniform(0,200),
+                 "learning_rate": tune.uniform(1e-5, 1e-2),
+                 "beta_1": tune.uniform(0.5, 1.0)
                  }
 
 
@@ -228,7 +209,7 @@ stopper = TrialPlateauStopper(
     metric="best_criteria",  # métrique à surveiller
     mode="min",  # on veut minimiser la métrique
     std=1e-16,  # Seuil d'amélioration minimal, ici environ 3-5% de la valeur de la loss
-    num_results=2000  # nbre d'iterations avant de checker le plateau
+    num_results=15  # nbre d'iterations avant de checker le plateau
 )
 
 # planificateur ASHA pour accélérer l'optimisation
@@ -236,16 +217,16 @@ stopper = TrialPlateauStopper(
 scheduler = ASHAScheduler(
     metric="best_criteria",
     mode="min",
-    max_t=2000, # nbre max d'iterations
-    grace_period=2000   # nbre min d'iterations avant de checker le plateau
+    max_t=800,
+    grace_period=800   # nbre min d'iterations avant de checker le plateau
 )
 
 
 # configuration de tune
 
 tune_config = TuneConfig(
-    num_samples=4, # nbre d'essais dans la grille
-    max_concurrent_trials=4, # nbre max d'essais en parallèle
+    num_samples=4,
+    max_concurrent_trials=4,
     scheduler=scheduler
 )
 
@@ -263,15 +244,17 @@ checkpoint_config = CheckpointConfig(
 # configuration de l'exécution
 
 run_config = RunConfig(
-    name="hyperparam_tuning_facades_dataset",
+    name="run_facades_dataset",
     storage_path=os.path.abspath("./my_ray_results_facades_dataset"),
     stop=stopper,  # ou stop={"training_iteration": 10}
     checkpoint_config=checkpoint_config
 )
 
-# lancement de l'optimisation avec Tuner
 
 if __name__ == "__main__":
+    # Ce que tu veux faire quand tu utilises le script directement
+    # C'est à dire python Trainable.py
+    # Ca evite de lancer tout le script quand tu fais un import
     print("********* initialisation de Ray *******************")
     ray.init(address="auto", include_dashboard=False)
     print(ray.cluster_resources())
@@ -289,9 +272,9 @@ if __name__ == "__main__":
     print("Lancement de l'optimisation avec Tuner")
     
     # récupération si entrainement interrompu
-    dir_path=os.path.abspath("./my_ray_results_facades_dataset/hyperparam_tuning_facades_dataset")
+    dir_path=os.path.abspath("./my_ray_results_facades_dataset/run_facades_dataset")
     if tune.Tuner.can_restore(dir_path):
-        print("Restauration de l'entrainement depuis le répertoire ./my_ray_results_facades_dataset/hyperparam_tuning_facades_dataset")
+        print(f"Restauration de l'entrainement depuis {dir_path}")
         tuner=tune.Tuner.restore(
             dir_path,
             trainable=trainable_with_resources,
@@ -306,7 +289,5 @@ if __name__ == "__main__":
         )
     results = tuner.fit()
     ray.shutdown()
-
-
 
 
