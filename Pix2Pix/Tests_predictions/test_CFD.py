@@ -1,3 +1,12 @@
+from pathlib import Path
+import os
+import numpy as np
+from CFD_dataset_cas_2 import load_dataset, get_tf_dataset, resize_and_normalize
+import matplotlib.pyplot as plt
+import json
+import pandas as pd
+import tensorflow as tf
+import keras
 
 
 """
@@ -21,21 +30,6 @@ Workflow :
 
 
 """
-
-
-
-
-from pathlib import Path
-import os
-import numpy as np
-from CFD_dataset_cas_2 import load_dataset, get_tf_dataset, resize_and_normalize
-import matplotlib.pyplot as plt
-import json
-import pandas as pd
-import tensorflow as tf
-import keras
-
-
 
 
 DEBUG = False
@@ -65,7 +59,7 @@ if DEBUG:
 # 2- variables des bornes du film
 
 CFD_path = Path("./git/ImageMLProject/Datasets/CFD_Dataset/")
-with open(os.path.join(CFD_path, "bornes_film_3.json"),"r") as f:
+with open(os.path.join(CFD_path, "data_film_3.json"),"r") as f:
     bornes = json.load(f)
 
 v_min = bornes["v_min"]
@@ -133,14 +127,21 @@ if os.path.isfile(params_path):
     print("------ Hyperparamètres ------")
     for k, v in best_params.items():
         print(f"{k}: {v}")
+
+
 # checkpoint path
 best_trial_path = os.path.join(ray_results_dir, best_trial_id)
+
+
 checkpoint_dirs = [
     d for d in os.listdir(best_trial_path)
     if os.path.isdir(os.path.join(best_trial_path, d)) and d.startswith("checkpoint_")
 ]
 if not checkpoint_dirs:
     raise FileNotFoundError("Aucun dossier de checkpoint trouvé.")
+
+
+
 # Option 1 : prendre le dernier checkpoint (ordre alphanumérique)
 checkpoint_dirs.sort()
 latest_checkpoint = checkpoint_dirs[-1]
@@ -155,7 +156,7 @@ print("Chemin du checkpoint :", checkpoint_path)
 
 generator = keras.models.load_model(os.path.join(
     checkpoint_path, "generator.keras"))
-discrimintor = keras.models.load_model(os.path.join(
+discriminator = keras.models.load_model(os.path.join(
     checkpoint_path, "discriminator.keras"))
 best_criteria_file = os.path.join(
     checkpoint_path, "training_state.json")
@@ -167,7 +168,7 @@ best_criteria_file = os.path.join(
 output_dir = os.path.abspath("./predictions_pix2pix_CFD_cas_8")
 os.makedirs(output_dir, exist_ok=True)
 
-mae_loss = tf.keras.losses.MeanAbsoluteError()
+
 
 def prediction(initial_image, target_image, v_min, v_max):
     """
@@ -185,8 +186,14 @@ def prediction(initial_image, target_image, v_min, v_max):
     pred = ((current_pred[0].numpy()+1) * 127.5) # np.darray (H,W,1), [0,255] /// on dénormalise
     pred_vitesse = pred/255*(v_max-v_min)+v_min
     tar_vitesse = (target_image[0].numpy()+1)/2*(v_max-v_min)+v_min
-    mae_vitesse = np.mean(np.abs(pred_vitesse - tar_vitesse))
-    return pred, mae_vitesse
+    diff_vitesse = pred_vitesse - tar_vitesse
+    mae = np.mean(np.abs(diff_vitesse))
+    mse = np.mean(np.square(diff_vitesse))
+    rmse= np.sqrt(mse)
+    return pred, mae, mse, rmse
+
+
+
 
 
 if DEBUG:
@@ -211,11 +218,17 @@ if DEBUG:
 
 # on va calculer l'erreur individuelle sur chacune des predictions du dataset de test
 mae_list = []
+mse_list = []
+rmse_list = []
 for i in range(x_test.shape[0]):
     inp = x_test[i:i+1] # tensor ([1,128,128,1]) normalise
     tar = y_test[i:i+1]
-    pred, loss_mae = prediction(inp, tar, v_min, v_max)
-    mae_list.append(loss_mae)
+    pred, test_mae, test_mse, test_rmse = prediction(inp, tar, v_min, v_max)
+    mae_list.append(test_mae)
+    mse_list.append(test_mse)
+    rmse_list.append(test_rmse)
+
+
 
 
 # prediction adaptée à un dataset
@@ -225,23 +238,29 @@ def prediction_dataset(inputs, targets, v_min, v_max):
     
     """
     mae_list = []
+    mse_list = []
+    rmse_list = []
     preds_list = []
     for i in range(inputs.shape[0]):
         inp = inputs[i:i+1] # tensor ([1,128,128,1]) normalise
         tar = targets[i:i+1]
-        pred, loss_mae = prediction(inp, tar, v_min, v_max)
-        mae_list.append(loss_mae)
+        pred, mae, mse, rmse = prediction(inp, tar, v_min, v_max)
+        mae_list.append(mae)
+        mse_list.append(mse)
+        rmse_list.append(rmse)
         preds_list.append(pred[np.newaxis, ...]) # oblige à garder la dimension batch [N,128,128,1]
     mae_dataset = np.mean(mae_list)
+    mse_dataset = np.mean(mse_list)
+    rmse_dataset = np.sqrt(mse_dataset)
     preds = np.concatenate(preds_list, axis=0)
-    return preds, mae_dataset
+    return preds, mae_dataset, mse_dataset, rmse_dataset
 
 
 
 # on veut calculer la valeur de la mae sur chacun des datasets
-preds_test, mae_dataset_test = prediction_dataset(x_test, y_test, v_min, v_max)
-preds_train, mae_dataset_train = prediction_dataset(x_train, y_train, v_min, v_max)
-preds_val, mae_dataset_val = prediction_dataset(x_val, y_val, v_min, v_max)
+preds_test, mae_dataset_test, mse_dataset_test, rmse_dataset_test = prediction_dataset(x_test, y_test, v_min, v_max)
+preds_train, mae_dataset_train, mse_dataset_train, rmse_dataset_train = prediction_dataset(x_train, y_train, v_min, v_max)
+preds_val, mae_dataset_val, mse_dataset_val, rmse_dataset_val = prediction_dataset(x_val, y_val, v_min, v_max)
 
 if DEBUG:
     print("MAE Test :", mae_dataset_test)
@@ -249,27 +268,92 @@ if DEBUG:
     print("MAE Val :", mae_dataset_val)
     print("Shape preds_test :", preds_test.shape)
 
+# //////////////////////
 # courbe des pertes
-plt.figure(figsize=(10, 6))
-plt.plot(mae_list, marker='o')
-plt.xlabel("Index image")
-plt.ylabel("Loss (MAE)")
-plt.title("Courbe des pertes sur le dataset de test")
-plt.grid(True)
-plt.axhline(mae_dataset_test,color='red', linestyle='--', linewidth=2, label=f"perte_test: {mae_dataset_test:.4f}")
-plt.axhline(mae_dataset_train,color='green', linestyle='--', linewidth=2, label=f"perte_train: {mae_dataset_train:.4f}")
-plt.axhline(mae_dataset_val,color='blue', linestyle='--', linewidth=2, label=f"perte_val: {mae_dataset_val:.4f}")
-plt.legend(loc='lower left', bbox_to_anchor=(0.2, 0.8), fontsize=9)
-plt.savefig(os.path.join(output_dir, "courbe_des_pertes_test.png"))
-plt.tight_layout()
+# //////////////////////
+def plot_loss_curve(metric_name, values_list, dataset_means, output_dir):
+    """
+    Affiche et sauvegarde la courbe des pertes (MAE, MSE, RMSE) sur le dataset de test.
+
+    Args:
+        metric_name (str): Nom de la métrique ("MAE", "MSE" ou "RMSE").
+        values_list (list): Liste des pertes individuelles par image.
+        dataset_means (dict): Moyennes globales des pertes {"train": x, "val": y, "test": z}.
+        output_dir (str): Dossier de sauvegarde.
+    """
+    plt.figure(figsize=(10, 5))
+    plt.plot(values_list, marker='o', markersize=3, linewidth=1, color='tab:blue', label=f'{metric_name} par image')
+
+    plt.xlabel("Index image")
+    plt.ylabel(f"Loss ({metric_name})")
+    plt.title(f"Courbe des pertes {metric_name} sur le dataset de test")
+    plt.grid(True, linestyle='--', alpha=0.5)
+
+    # Lignes horizontales pour les moyennes globales
+    plt.axhline(dataset_means['test'], color='red', linestyle='--', linewidth=2,
+                label=f"{metric_name}_test: {dataset_means['test']:.4f}")
+    plt.axhline(dataset_means['train'], color='green', linestyle='--', linewidth=2,
+                label=f"{metric_name}_train: {dataset_means['train']:.4f}")
+    plt.axhline(dataset_means['val'], color='blue', linestyle='--', linewidth=2,
+                label=f"{metric_name}_val: {dataset_means['val']:.4f}")
+
+    plt.legend(loc='upper right', fontsize=9)
+    plt.tight_layout()
+
+    filename = f"courbe_des_pertes_{metric_name.lower()}.png"
+    plt.savefig(os.path.join(output_dir, filename), dpi=300, bbox_inches='tight')
+    plt.show()
+    plt.close()
+
+# dict des métriques d'erreurs à afficher
+metrics = {
+    "MAE": {
+        "values": mae_list,
+        "means": {
+            "train": mae_dataset_train,
+            "val": mae_dataset_val,
+            "test": mae_dataset_test
+        }
+    },
+    "MSE": {
+        "values": mse_list,
+        "means": {
+            "train": mse_dataset_train,
+            "val": mse_dataset_val,
+            "test": mse_dataset_test
+        }
+    },
+    "RMSE": {
+        "values": rmse_list,
+        "means": {
+            "train": rmse_dataset_train,
+            "val": rmse_dataset_val,
+            "test": rmse_dataset_test
+        }
+    }
+}
+
+fig, axes = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
+for ax, (name, data) in zip(axes, metrics.items()):
+    ax.plot(data["values"], marker='o', markersize=3, color='tab:blue', label=name)
+    for split, color in zip(["train", "val", "test"], ["green", "blue", "red"]):
+        ax.axhline(data["means"][split], color=color, linestyle='--', label=f"{split}: {data['means'][split]:.4f}")
+    ax.set_ylabel(f"{name}")
+    ax.grid(True, linestyle='--', alpha=0.5)
+axes[-1].set_xlabel("Index image")
+fig.suptitle("Courbes de pertes par métrique")
+fig.tight_layout()
+fig.legend(loc='upper right')
+plt.savefig(os.path.join(output_dir, "courbe_des_pertes_metriques.png"), dpi=300)
 plt.show()
 
 
+# ////////////////////////////////////////////////
+# affichage des images / des erreurs absolues / des erreurs quadratiques
+# ///////////////////////////////////////////////
 
-# affichage des images
 
-
-for i in range (0, x_test.shape[0], 50):
+for i in range (3, x_test.shape[0], 30):
     # Données d'entrée et cible
     input_i = x_test[i]
     tar_i = y_test[i]
@@ -279,26 +363,85 @@ for i in range (0, x_test.shape[0], 50):
     img_tar = np.squeeze((tar_i.numpy() + 1) * 127.5).astype(np.uint8)
     img_pred = np.squeeze(pred_i).astype(np.uint8)
     # Conversion en vitesses physiques
-    pred_vitesse = np.squeeze(pred_i) / 255 * (v_max - v_min) + v_min
-    tar_vitesse = np.squeeze((tar_i.numpy() + 1) / 2) * (v_max - v_min) + v_min
-   # Carte d’erreur
-    error_map = np.abs(pred_vitesse - tar_vitesse)
+    pred_vitesse = np.squeeze(pred_i) / 255 * (v_max - v_min) + v_min # [0,255] -> [0,1] -> [v_min,v_max]
+    tar_vitesse = np.squeeze((tar_i.numpy() + 1) / 2) * (v_max - v_min) + v_min # [-1,1] -> [0,1] -> [v_min,v_max]
+   # Carte d’erreur mae : erreur locale absolue
+    error_map_mae_rel = np.abs(pred_vitesse - tar_vitesse) / (np.maximum(0, np.abs(tar_vitesse)))
+    error_map_mae_abs = np.abs(pred_vitesse - tar_vitesse)
+    error_max = np.max(error_map_mae_abs)
+    error_min = np.min(error_map_mae_abs)
+    error_variance = np.var(error_map_mae_abs)
+    # Carte d’erreur mse : erreur locale quadratique
+    error_map_quad = np.square(pred_vitesse - tar_vitesse)
+    mae_mean = np.mean(error_map_mae_abs)
+    mse_mean = np.mean(error_map_quad)
+    rmse_mean = np.sqrt(mse_mean)
     # affichage
-    fig, ax = plt.subplots (1,4,sharey=True,figsize=(10, 4))
-    ax[0].imshow(img_inp)
-    ax[0].set_title(f'Input {i}')
-    ax[1].imshow(img_tar)
-    ax[1].set_title(f'Target {i}')
-    ax[2].imshow(img_pred)
-    ax[2].set_title(f'Prediction {i}')
-    im=ax[3].imshow(error_map, cmap="hot")
-    ax[3].set_title(f'Erreur_prediction_vitesses')
-    fig.colorbar(im, ax=ax[3], fraction=0.046, pad=0.04)
-    fig.suptitle(f'Prediction Example {i}', fontsize=14)
+    """
+    On veut une échelle comparative entre les images et avec l'error_map
+        - pour l'affichage des images je prends l'échelle 0/v_max du film
+        - pour l'error_map_abs je prends l'échelle 0/max(error_map_mae_abs)
+        - pourm'erreur mae relative je prends l'échelle 0/10 (on affiche les erreurs relatives inférieures à 10x la valeur réelle)
+        - pour l'error_map_quad je prends l'échelle 0/max(error_map_quad.max)
+    """
+    fig, ax = plt.subplots (1,3,sharey=True,figsize=(10,8))
+    # Échelle commune pour les vitesses
+    vmin_img, vmax_img = 0, v_max
+    # Images de vitesse
+    im0 = ax[0].imshow(img_tar, vmin=0, vmax=vmax_img)
+    ax[0].set_title("Target")
+    ax[0].set_axis_off()
+    im1 = ax[1].imshow(img_pred, vmin=0, vmax=vmax_img)
+    ax[1].set_title("Prediction")
+    ax[1].set_axis_off()
+    im2 = ax[2].imshow(error_map_mae_abs, vmin=0, vmax=error_max)
+    ax[2].set_title("MAE prediction")
+    ax[2].set_axis_off()
+    fig.colorbar(im0, ax=ax[0], fraction=0.046, pad=0.04, label="m/s")
+    fig.colorbar(im1, ax=ax[1], fraction=0.046, pad=0.04, label="m/s")
+    fig.colorbar(im2, ax=ax[2], fraction=0.046, pad=0.04, label="m/s")
+    stats_text = (
+        f"erreur_abs_max = {error_max:.3f} m/s\n"
+        f"erreur_abs_min = {error_min:.3f} m/s\n"
+        f"erreur_abs_variance = {error_variance:.3f}\n"
+        f"MAE moyenne = {mae_mean:.3f} m/s\n"
+    )
+    fig.suptitle(f"Prediction {i} — Erreurs absolues sur la prédiction de vitesse", fontsize=16, y=0.95, color='black')
+    fig.text(0.01, 0.85, stats_text, fontsize=12, color='black', va='top')
     fig.tight_layout()
-    plt.savefig(os.path.join(output_dir, f'fig_pred_{i}.png'))
+    plt.savefig(os.path.join(output_dir, f'fig_pred_mae_abs_{i}.png'))
+    # Cartes d'erreur
+    fig, ax = plt.subplots(1, 4, sharex=True, sharey=True, figsize=(15,12))    
+    im0 = ax[0].imshow(img_tar, vmin=0, vmax=vmax_img)
+    ax[0].set_title("Target")
+    ax[0].set_axis_off()
+    im1 = ax[1].imshow(error_map_mae_abs, vmin=0, vmax=error_max)
+    ax[1].set_title("MAE sur la vitesse")
+    ax[1].set_axis_off()
+    im4 = ax[2].imshow(error_map_mae_rel, cmap="coolwarm", vmin=0, vmax=5)
+    ax[2].set_title("MAE relative")
+    ax[2].set_axis_off()
+    im5 = ax[3].imshow(error_map_quad, cmap="coolwarm", vmin=0, vmax=error_map_quad.max())
+    ax[3].set_title("MSE sur la vitesse (m²/s²)")
+    ax[3].set_axis_off()
+    fig.colorbar(im0, ax=ax[0], fraction=0.046, pad=0.04, label="m/s")
+    fig.colorbar(im1, ax=ax[1], fraction=0.046, pad=0.04, label="m/s")
+    fig.colorbar(im4, ax=ax[2], fraction=0.046, pad=0.04, label= "mae relative" )
+    fig.colorbar(im5, ax=ax[3], fraction=0.046, pad=0.04, label="m²/s²")
+        # ---- ANNOTATIONS ----
+    # Ajoute les statistiques dans la figure
+    stats_text = (
+        f"MAE = {mae_mean:.3f} m/s\n"
+        f"MSE = {mse_mean:.3f} (m/s)²\n"
+        f"RMSE = {rmse_mean:.3f} m/s"
+    )
+    fig.suptitle(f"Prediction {i} — Erreurs sur la prédiction de vitesse", fontsize=16, y=0.95, color='black')
+    fig.text(0.01, 0.85, stats_text, fontsize=12, color='black', va='top')
+    fig.tight_layout()
+    plt.savefig(os.path.join(output_dir, f'fig_pred_mae-mse-rmse_{i}.png'))
     plt.show()
     plt.close()
+
 
 
 
