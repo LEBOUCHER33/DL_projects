@@ -33,7 +33,7 @@ print(model.unet)
 
 # 3- Loading du dataset de test
 
-from stable_main import test_dataloader
+from Stable_diffusion.stable_main_LoRA import test_dataloader
 
 
 
