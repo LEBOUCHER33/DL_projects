@@ -15,9 +15,9 @@ import tensorflow as tf
 import os
 from pathlib import Path
 import json
-from train import fit, calculate_gen_loss
-from CFD_dataset_cas_2 import load_dataset, get_tf_dataset, resize_and_normalize
-from CFD import Generator, Discriminator
+from Pix2Pix.training import fit, calculate_gen_loss
+from Pix2Pix.Datasets_Processing.dataset_CFD import load_dataset, get_tf_dataset, resize_and_normalize
+from Pix2Pix.Archi_Pix2Pix.architecture_model_GAN import Generator, Discriminator
 import ray
 from ray import tune
 from ray.tune.tuner import Tuner

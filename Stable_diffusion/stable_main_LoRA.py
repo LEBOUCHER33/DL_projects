@@ -22,8 +22,7 @@ Pour fine_tuner Stable_diffusion on utilisera la lib diffusers qui gère la méc
 
 import torch
 from pathlib import Path
-from diffusers import StableDiffusionImg2ImgPipeline, UNet2DConditionModel
-from diffusers.models import LoRALinearLayer
+from diffusers import StableDiffusionImg2ImgPipeline
 from torch.utils.data import DataLoader, Dataset
 from PIL import Image
 import os
@@ -219,7 +218,7 @@ model.unet.enable_adapters()
 # 5- configuration des paramètres d'entrainements
 # /////////////////////////////////////////////////
 
-EPOCHS = 5
+EPOCHS = 500
 LR = 1e-5
 
 # Optimiseur

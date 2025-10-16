@@ -1,12 +1,12 @@
 from pathlib import Path
 import os
 import numpy as np
-from Pix2Pix.Datasets_Processing.CFD_dataset_cas_2 import load_dataset, get_tf_dataset, resize_and_normalize
-import matplotlib.pyplot as plt
+from Pix2Pix.Datasets_Processing.dataset_CFD import load_dataset, get_tf_dataset, resize_and_normalize
 import json
 import pandas as pd
 import tensorflow as tf
 import keras
+import matplotlib.pyplot as plt
 
 
 """
@@ -36,7 +36,7 @@ DEBUG = False
 
 # 1- Datasets
 
-dataset_name = "film_3.npy"
+dataset_name = "film_3_128x128.npy"
 dataset_path = Path("./git/ImageMLProject/Datasets/CFD_Dataset/") / dataset_name
 dataset_path = dataset_path.resolve()
 
@@ -59,7 +59,7 @@ if DEBUG:
 # 2- variables des bornes du film
 
 CFD_path = Path("./git/ImageMLProject/Datasets/CFD_Dataset/")
-with open(os.path.join(CFD_path, "data_film_3.json"),"r") as f:
+with open(os.path.join(CFD_path, "data_film_3_128x128.json"),"r") as f:
     bornes = json.load(f)
 
 v_min = bornes["v_min"]
@@ -105,6 +105,8 @@ for trial_dir in os.listdir(ray_results_dir):
 
 if not dataframes:
     raise ValueError("Aucun fichier de résultats valide trouvé.")
+
+
 # je réunis les trials dans un dataframe
 result_df = pd.concat(dataframes, ignore_index=True)
 # je recupère uniquement la métrique la plus performante / trial
@@ -121,6 +123,7 @@ print(f"Best criteria   : {best_trial['best_criteria']}")
 print(f"Training step   : {best_trial['training_iteration']}")
 best_trial_id = best_trial['trial_id']
 params_path = os.path.join(ray_results_dir, best_trial_id, "params.json")
+
 if os.path.isfile(params_path):
     with open(params_path, "r") as f:
         best_params = json.load(f)
@@ -182,16 +185,22 @@ def prediction(initial_image, target_image, v_min, v_max):
         - MAE de la vitesse (float)
     
     """
-    current_pred = generator(initial_image, training=False)  # tenseur (b, C, W, H)
+    # prediction
+    current_pred = generator(initial_image, training=False)  # tenseur (b, C, W, H) [-1,1]
     pred = ((current_pred[0].numpy()+1) * 127.5) # np.darray (H,W,1), [0,255] /// on dénormalise
-    pred_vitesse = pred/255*(v_max-v_min)+v_min
-    tar_vitesse = (target_image[0].numpy()+1)/2*(v_max-v_min)+v_min
+    # conversion en vitesse physique
+    pred_vitesse = pred/255*(v_max-v_min)+v_min # [0,255] -> [0,1] -> [v_min,v_max]
+    tar_vitesse = (target_image[0].numpy()+1)/2*(v_max-v_min)+v_min # [-1,1] -> [0,1] -> [v_min,v_max]
+    # calculs d'erreurs
     diff_vitesse = pred_vitesse - tar_vitesse
-    mae = np.mean(np.abs(diff_vitesse))
-    mse = np.mean(np.square(diff_vitesse))
-    rmse= np.sqrt(mse)
-    return pred, mae, mse, rmse
-
+    err_mae = np.abs(diff_vitesse) # np.ndarray (H,W,1) contenant l'erreur absolue pixel par pixel
+    err_mse = np.square(diff_vitesse)
+    # moyennes des erreurs et dispersion
+    mae_mean = np.mean(err_mae) # erreur moyenne sur l'image
+    mse_mean = np.mean(err_mse)
+    rmse_mean = np.sqrt(mse_mean)
+    var_mae = np.var(err_mae)
+    return pred, mae_mean, mse_mean, rmse_mean, var_mae
 
 
 
@@ -202,7 +211,7 @@ if DEBUG:
     print(inp.shape, tar.shape, type(inp), type(tar), np.min(inp), np.max(inp)) # tensors ([1,128,128,1]) [-1,1]
     tar_arr = ((tar.numpy()+1)*127.5) # np.ndarray (1,128,128,1) [0,255]
     tar_arr_3d = ((tar[0].numpy()+1)*127.5) # (128,128,1) [0,255] on supp la dimension batch tar[0]
-    pred, loss_mae = prediction(inp, tar, v_min, v_max)
+    pred, loss_mae, loss_mse, loss_rmse, var_mae = prediction(inp, tar, v_min, v_max)
     print(pred.shape, type(pred), np.min(pred), np.max(pred)) # np.array (128,128,1) [0,255]
     print("MAE_loss :", loss_mae)
     # pour visualiser les images on ramène en 2D et on dénormalise
@@ -216,17 +225,20 @@ if DEBUG:
     plt.imshow(image)
     plt.show()
 
-# on va calculer l'erreur individuelle sur chacune des predictions du dataset de test
+
+
+# on va calculer l'erreur individuelle sur chacune des predictions du dataset de test et la variance
+error_maps = []
 mae_list = []
-mse_list = []
 rmse_list = []
 for i in range(x_test.shape[0]):
     inp = x_test[i:i+1] # tensor ([1,128,128,1]) normalise
     tar = y_test[i:i+1]
-    pred, test_mae, test_mse, test_rmse = prediction(inp, tar, v_min, v_max)
+    pred, test_mae, test_mse, test_rmse, var_mae = prediction(inp, tar, v_min, v_max)
     mae_list.append(test_mae)
-    mse_list.append(test_mse)
     rmse_list.append(test_rmse)
+    
+
 
 
 
@@ -240,27 +252,31 @@ def prediction_dataset(inputs, targets, v_min, v_max):
     mae_list = []
     mse_list = []
     rmse_list = []
+    var_list = []
     preds_list = []
     for i in range(inputs.shape[0]):
         inp = inputs[i:i+1] # tensor ([1,128,128,1]) normalise
         tar = targets[i:i+1]
-        pred, mae, mse, rmse = prediction(inp, tar, v_min, v_max)
-        mae_list.append(mae)
-        mse_list.append(mse)
+        pred, mae_mean, mse_mean, rmse, var_mae = prediction(inp, tar, v_min, v_max)
+        mae_list.append(mae_mean)
+        mse_list.append(mse_mean)
         rmse_list.append(rmse)
+        var_list.append(var_mae)
         preds_list.append(pred[np.newaxis, ...]) # oblige à garder la dimension batch [N,128,128,1]
-    mae_dataset = np.mean(mae_list)
+    mae_dataset = np.mean(mae_list) # moyenne des MAE individuelles sur le dataset
     mse_dataset = np.mean(mse_list)
     rmse_dataset = np.sqrt(mse_dataset)
-    preds = np.concatenate(preds_list, axis=0)
-    return preds, mae_dataset, mse_dataset, rmse_dataset
+    var_dataset = np.var(mae_list) # variance des MAE individuelles sur le dataset
+    preds = np.concatenate(preds_list, axis=0) 
+    var_mae = np.var(mae_list) # variance des MAE individuelles sur le dataset
+    return preds, mae_dataset, rmse_dataset, mae_list, rmse_list, var_dataset
 
 
 
 # on veut calculer la valeur de la mae sur chacun des datasets
-preds_test, mae_dataset_test, mse_dataset_test, rmse_dataset_test = prediction_dataset(x_test, y_test, v_min, v_max)
-preds_train, mae_dataset_train, mse_dataset_train, rmse_dataset_train = prediction_dataset(x_train, y_train, v_min, v_max)
-preds_val, mae_dataset_val, mse_dataset_val, rmse_dataset_val = prediction_dataset(x_val, y_val, v_min, v_max)
+preds_test, mae_dataset_test, rmse_dataset_test, test_mae_list, test_rmse_list, test_var = prediction_dataset(x_test, y_test, v_min, v_max)
+preds_train, mae_dataset_train, rmse_dataset_train, train_mae_list, train_rmse_list, train_var = prediction_dataset(x_train, y_train, v_min, v_max)
+preds_val, mae_dataset_val, rmse_dataset_val, val_mae_list, val_rmse_list, val_var = prediction_dataset(x_val, y_val, v_min, v_max)
 
 if DEBUG:
     print("MAE Test :", mae_dataset_test)
@@ -315,14 +331,6 @@ metrics = {
             "test": mae_dataset_test
         }
     },
-    "MSE": {
-        "values": mse_list,
-        "means": {
-            "train": mse_dataset_train,
-            "val": mse_dataset_val,
-            "test": mse_dataset_test
-        }
-    },
     "RMSE": {
         "values": rmse_list,
         "means": {
@@ -348,6 +356,114 @@ plt.savefig(os.path.join(output_dir, "courbe_des_pertes_metriques.png"), dpi=300
 plt.show()
 
 
+
+
+
+# ////////////////////////////////////////////
+# courbe des pertes globales sur les trois datasets avec affichage de la variance globale
+# ////////////////////////////////////////////
+
+
+all_data = []
+
+# on regroupe les données
+for idx, mae in zip (train_idx, train_mae_list):
+    all_data.append((idx, mae, 'train'))
+
+for idx, mae in zip (val_idx, val_mae_list):
+    all_data.append((idx, mae, 'val'))
+
+for idx, mae in zip (test_idx, test_mae_list):
+    all_data.append((idx, mae, 'test'))    
+
+# on trie selon l'index d'origine
+all_data.sort(key=lambda x: x[0])
+
+# tableaux numpy
+indices = np.array([item[0] for item in all_data])
+mae_values = np.array([item[1] for item in all_data])
+labels = np.array([item[2] for item in all_data])   
+
+
+# figure
+plt.figure(figsize=(12, 6))
+colors = {'train': 'green', 'val': 'blue', 'test': 'red'}
+for split in ['train', 'val', 'test']:
+    mask = labels == split
+    plt.errorbar(indices[mask], 
+                 mae_values[mask], 
+                 fmt='o', markersize=4, 
+                 label=split, 
+                 color=colors[split], alpha=0.7)
+
+plt.axhline(mae_dataset_train, color='green', linestyle='--', label=f"MAE_train: {mae_dataset_train:.4f} m/s")
+plt.fill_between(indices, mae_dataset_train - train_var, mae_dataset_train + train_var, color='green', alpha=0.2, label=f"Variance_train : {train_var:.4f} (m/s)²")
+plt.axhline(mae_dataset_val, color='blue', linestyle='--', label=f"MAE_val: {mae_dataset_val:.4f} m/s")
+plt.fill_between(indices, mae_dataset_val - val_var, mae_dataset_val + val_var, color='blue', alpha=0.2, label=f"Variance_val : {val_var:.4f} (m/s)²")
+plt.axhline(mae_dataset_test, color='red', linestyle='--', label=f"MAE_test: {mae_dataset_test:.4f} m/s")
+plt.fill_between(indices, mae_dataset_test - test_var, mae_dataset_test + test_var, color='red', alpha=0.2, label=f"Variance_test : {test_var:.4f} (m/s)²")
+plt.xlabel("Index image dans le film")
+plt.ylabel("MAE par image (moyenne des erreurs absolues sur la vitesse) m/s")
+plt.title("Courbe des pertes MAE moyenne par prediction sur les trois datasets")
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.5)
+plt.tight_layout()
+#plt.savefig(os.path.join(output_dir, "courbe_des_pertes_mae_avec_variance.png"), dpi=300)
+plt.show()    
+
+
+# //////////////////////////////////
+# courbe des RMSE moyens sur les trois datasets
+# //////////////////////////////////
+
+all_data_rmse = []
+
+# on regroupe les données
+for idx, rmse in zip (train_idx, train_rmse_list):
+    all_data_rmse.append((idx, rmse, 'train'))
+
+for idx, rmse in zip (val_idx, val_rmse_list):
+    all_data_rmse.append((idx, rmse, 'val'))
+
+for idx, rmse in zip (test_idx, test_rmse_list):
+    all_data_rmse.append((idx, rmse, 'test'))    
+
+# on trie selon l'index d'origine
+all_data_rmse.sort(key=lambda x: x[0])
+
+# tableaux numpy
+indices = np.array([item[0] for item in all_data_rmse])
+rmse_values = np.array([item[1] for item in all_data_rmse])
+labels = np.array([item[2] for item in all_data_rmse])   
+
+# figure
+plt.figure(figsize=(12, 6))
+colors = {'train': 'green', 'val': 'blue', 'test': 'red'}
+for split in ['train', 'val', 'test']:
+    mask = labels == split
+    plt.errorbar(indices[mask], 
+                 rmse_values[mask], 
+                 fmt='o', markersize=4, 
+                 label=split, 
+                 color=colors[split], alpha=0.7)
+
+plt.axhline(rmse_dataset_train, color='green', linestyle='--', label=f"RMSE_train: {rmse_dataset_train:.4f} m/s")
+plt.axhline(rmse_dataset_val, color='blue', linestyle='--', label=f"RMSE_val: {rmse_dataset_val:.4f} m/s")
+plt.axhline(rmse_dataset_test, color='red', linestyle='--', label=f"RMSE_test: {rmse_dataset_test:.4f} m/s")
+plt.xlabel("Index image dans le film")
+plt.ylabel("RMSE par image (moyenne des erreurs quadratiques sur la vitesse) m/s")
+plt.title("Courbe des pertes RMSE moyenne par prediction sur les trois datasets")
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.5)
+plt.tight_layout()
+plt.savefig(os.path.join(output_dir, "courbe_des_pertes_rmse.png"), dpi=300)
+plt.show()    
+
+
+
+
+
+
 # ////////////////////////////////////////////////
 # affichage des images / des erreurs absolues / des erreurs quadratiques
 # ///////////////////////////////////////////////
@@ -371,8 +487,10 @@ for i in range (3, x_test.shape[0], 30):
     error_max = np.max(error_map_mae_abs)
     error_min = np.min(error_map_mae_abs)
     error_variance = np.var(error_map_mae_abs)
-    # Carte d’erreur mse : erreur locale quadratique
+    # Carte d’erreur rmse : erreur locale quadratique
     error_map_quad = np.square(pred_vitesse - tar_vitesse)
+    error_map_quad_root = np.sqrt(error_map_quad)
+    # statistiques globales sur l'image
     mae_mean = np.mean(error_map_mae_abs)
     mse_mean = np.mean(error_map_quad)
     rmse_mean = np.sqrt(mse_mean)
@@ -384,7 +502,7 @@ for i in range (3, x_test.shape[0], 30):
         - pourm'erreur mae relative je prends l'échelle 0/10 (on affiche les erreurs relatives inférieures à 10x la valeur réelle)
         - pour l'error_map_quad je prends l'échelle 0/max(error_map_quad.max)
     """
-    fig, ax = plt.subplots (1,3,sharey=True,figsize=(10,8))
+    fig, ax = plt.subplots (1,3,sharey=True,figsize=(12,8))
     # Échelle commune pour les vitesses
     vmin_img, vmax_img = 0, v_max
     # Images de vitesse
@@ -411,23 +529,23 @@ for i in range (3, x_test.shape[0], 30):
     fig.tight_layout()
     plt.savefig(os.path.join(output_dir, f'fig_pred_mae_abs_{i}.png'))
     # Cartes d'erreur
-    fig, ax = plt.subplots(1, 4, sharex=True, sharey=True, figsize=(15,12))    
+    fig, ax = plt.subplots(1, 4, sharex=True, sharey=True, figsize=(15,8))    
     im0 = ax[0].imshow(img_tar, vmin=0, vmax=vmax_img)
     ax[0].set_title("Target")
     ax[0].set_axis_off()
     im1 = ax[1].imshow(error_map_mae_abs, vmin=0, vmax=error_max)
     ax[1].set_title("MAE sur la vitesse")
     ax[1].set_axis_off()
-    im4 = ax[2].imshow(error_map_mae_rel, cmap="coolwarm", vmin=0, vmax=5)
+    im4 = ax[2].imshow(error_map_mae_rel, cmap="coolwarm", vmin=0, vmax=2)
     ax[2].set_title("MAE relative")
     ax[2].set_axis_off()
-    im5 = ax[3].imshow(error_map_quad, cmap="coolwarm", vmin=0, vmax=error_map_quad.max())
-    ax[3].set_title("MSE sur la vitesse (m²/s²)")
+    im5 = ax[3].imshow(error_map_quad_root, cmap="coolwarm", vmin=0, vmax=error_map_quad.max())
+    ax[3].set_title("RMSE sur la vitesse (m²/s²)")
     ax[3].set_axis_off()
     fig.colorbar(im0, ax=ax[0], fraction=0.046, pad=0.04, label="m/s")
     fig.colorbar(im1, ax=ax[1], fraction=0.046, pad=0.04, label="m/s")
     fig.colorbar(im4, ax=ax[2], fraction=0.046, pad=0.04, label= "mae relative" )
-    fig.colorbar(im5, ax=ax[3], fraction=0.046, pad=0.04, label="m²/s²")
+    fig.colorbar(im5, ax=ax[3], fraction=0.046, pad=0.04, label="m/s")
         # ---- ANNOTATIONS ----
     # Ajoute les statistiques dans la figure
     stats_text = (
@@ -438,7 +556,7 @@ for i in range (3, x_test.shape[0], 30):
     fig.suptitle(f"Prediction {i} — Erreurs sur la prédiction de vitesse", fontsize=16, y=0.95, color='black')
     fig.text(0.01, 0.85, stats_text, fontsize=12, color='black', va='top')
     fig.tight_layout()
-    plt.savefig(os.path.join(output_dir, f'fig_pred_mae-mse-rmse_{i}.png'))
+    plt.savefig(os.path.join(output_dir, f'fig_pred_mae-rmse_{i}.png'))
     plt.show()
     plt.close()
 

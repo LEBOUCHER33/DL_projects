@@ -2,6 +2,9 @@
 
 Script de preprocessing des data pour évaluer les performances du modèle entrainé sur les champs de vitesse
 
+On calculait jusque là MAE des pixels des images interpolées,
+On veut désormais évaluer comment Pix2Pix reconstruit directement les champs de vitesse
+
 = comparer les vitesses interpolées en chaque points de la grille approximant les valeurs réelles aux noeuds de maillage
 
 1- on a un maillage irrégulier avec des coordonnées (x_i,y_i) 
@@ -121,28 +124,75 @@ _Returns_:
     grid_z = interp_lin(grid_x, grid_y)
     grids = []
     velo = (v**2).sum(-1)
+    v_min_list = []
     for t in range(T):
         interpolator = LinearTriInterpolator(tri, velo[t])
-        grid_z = interpolator(grid_x, grid_y)
-        grid_z = np.nan_to_num(grid_z, nan=-velo.max())  # remplacer les NaN par une valeur négative
-        grids.append(grid_z.data)
-    grids = np.array(grids)
-    v_min, v_max = grids.min(), grids.max()
-    grids_norm = (grids-grids.min())/(grids.max()-grids.min())*255 # normalisation globale
-    grids_norm = grids_norm.astype("int")
-    return grids, grids_norm, v_min, v_max
+        grid_z = interpolator(grid_x, grid_y).data # array 2D des valeurs de vitesse interpolées
+        # calcul des NaN
+        nans = np.isnan(grid_z)
+        nb_nan = np.sum(nans)
+        nb_pts = grid_z.size
+        ratio_nan = nb_nan/nb_pts
+        # calcul de la vitesse min (non NaN)
+        v_min = np.nanmin(grid_z)
+        v_min_list.append(v_min)
+        # remplacement des NaN par une valeur négative
+        grid_z_transformed = np.nan_to_num(grid_z, nan=-velo.max())  # remplacer les NaN par une valeur négative
+        grids.append(grid_z_transformed)
+    # conversion en np.ndarray 3D
+    grids = np.array(grids) # (990, 128, 128) [v_min, v_max]
+    v_min = np.min(v_min_list)
+    v_max = grids.max()
+    grids_norm = (grids-grids.min())/(grids.max()-grids.min())*255 # [0,255]
+    grids_norm = np.round(grids_norm).astype(int)
+    return grid_z, grids, grids_norm, v_min, v_max, ratio_nan
 
 
-film_3_phy, film_3_norm, v_min, v_max = get_list_image(dataset_path, resolution=128)
+
+grid_z_3, film_3_phy, film_3_norm, v_min, v_max, ratio_nan = get_list_image(dataset_path, resolution=128)
+
+
+# /////////////////////////////
+# visualisation des NaN
+# /////////////////////////////
+
+import matplotlib.pyplot as plt
+
+frame = grid_z_3
+nan_mask = np.isnan(frame)
+
+# visualisation de la localisation des NaN en noir et blanc
+plt.figure(figsize=(8,6))
+plt.imshow(nan_mask, origin='lower', cmap='gray')
+plt.title("Localisation des NaN (blanc = NaN, noir = valeurs valides)")
+plt.colorbar(label="1 = NaN, 0 = valide")
+plt.xticks([])
+plt.yticks([])
+plt.savefig(os.path.join(output_dir, "localisation_des_NaN.png"), dpi=300)
+plt.show()
+
+# visualisation de la carte des vitesses avec les NaN
+plt.figure(figsize=(8,6))
+im = plt.imshow(frame, origin='lower', cmap='viridis')
+plt.imshow(nan_mask, origin='lower', cmap ='coolwarm',alpha=0.8)
+plt.colorbar(im, label="Vitesse [m/s]")
+plt.title("Carte de vitesse avec zones NaN (rouge = données manquantes)")
+plt.xticks([])
+plt.yticks([])
+plt.savefig(os.path.join(output_dir, "carte_des_vitesses_avec_NaN.png"), dpi=300)
+plt.show()
 
 # sauvegarde du film
-np.save(os.path.join(output_dir, "film_3.npy"), film_3_norm)
-np.save(os.path.join(output_dir, "film_3_phy.npy"), film_3_phy)
+np.save(os.path.join(output_dir, "film_3_128x128.npy"), film_3_norm)
+np.save(os.path.join(output_dir, "film_3_phy_128x128.npy"), film_3_phy)
 
 
 # sauvegarde des valeurs des bornes d'interpolation
-bornes = {"v_min": float(v_min), "v_max": float(v_max)}
-with open(os.path.join(output_dir, "bornes_film_3.json"), "w") as f:
+bornes = {"v_min": float(v_min), 
+          "v_max": float(v_max),
+          "ratio_nan": float(ratio_nan)
+          }
+with open(os.path.join(output_dir, "data_film_3_128x128.json"), "w") as f:
         json.dump(bornes, f, indent=4)
 
 
