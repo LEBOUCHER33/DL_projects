@@ -196,15 +196,14 @@ unet = model.unet
 
 # Configurer LoRA
 config = LoraConfig(
-    r=8,
+    r=8,  # nbre de dimensions latentes : plus r est grand, plus l'adaptation est flexible mais plus il y a de paramètres à entraîner'
     lora_alpha=32,
     target_modules=["to_q", "to_v"],  # couches attention du UNet
     lora_dropout=0.1,
     bias="none"
 )
 
-# integration des adaptaters LoRA dans l'UNet
-model.unet = get_peft_model(model.unet, config)
+
 
 """
 # Ajouter une couche LoRA à ton UNet
@@ -218,18 +217,20 @@ model.unet.enable_adapters()
 # 5- configuration des paramètres d'entrainements
 # /////////////////////////////////////////////////
 
-EPOCHS = 500
+EPOCHS = 100
 LR = 1e-5
-
 # Optimiseur
 optimizer = torch.optim.Adam(model.unet.parameters(), lr=LR)
+# model
+model.unet = get_peft_model(model.unet, config)
+unet.train()
 
 
 # //////////////////////////////////
 # 6- boucle d'entrainement
 # //////////////////////////////////
 
-unet.train()
+
 
 # Boucle d'entrainement
 """
@@ -311,6 +312,9 @@ for epoch in range(EPOCHS):
         epoch_loss += loss.item()
     losses_list.append(epoch_loss / len(train_loader))
     print(f"Epoch {epoch+1} - Loss: {epoch_loss / len(train_loader):.6f}")
+
+
+
 
 
 # sauvegarde de la liste des pertes 
